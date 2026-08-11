@@ -1,0 +1,9 @@
+streamlit
+numpy
+pandas
+scipy
+matplotlib
+plotly
+PySide6==6.9.2
+pyinstaller
+pytest
