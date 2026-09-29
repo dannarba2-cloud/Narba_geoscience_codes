@@ -62,7 +62,7 @@ profile_default/
 ipython_config.py
 
 # App runtime outputs
-GeoFieldLab_Pro/outputs/
+Geonarba/outputs/
 *.log
 
 # Documentation/build tooling

@@ -1,10 +1,22 @@
-# Narba_geoscience_codes
+# Geonarba
 
-My geophysics playground: code, apps, and written ideas exploring seismic methods, potential fields, GIS, machine learning, MATLAB, QGIS, ArcGIS, and AI-assisted interpretation.
+GEONARBA is a gravity and magnetic potential-field anomaly processing workspace. The project now contains:
 
-## Current App
+- `desktop/`: the GeoFieldLab Pro Desktop V1 app for professional interpreter workflows.
+- `app.py`: the original Streamlit prototype, kept as a reference and quick web demo.
+- `core/`: UI-independent scientific routines shared by tests, Streamlit, and desktop controllers.
 
-- [GeoFieldLab Pro](./GeoFieldLab_Pro/) - a Python desktop and Streamlit workspace for gravity and magnetic potential-field processing, inspired by GMinterp.
+All of these live in [`Geonarba/`](./Geonarba/).
+
+## Install
+
+```powershell
+cd Geonarba
+pip install -r requirements.txt
+python -m desktop
+```
+
+See [Geonarba/README.md](./Geonarba/README.md) for the Streamlit demo, tests, supported input, and methods.
 
 ## License
 

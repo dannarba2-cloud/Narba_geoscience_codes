@@ -9,7 +9,7 @@ GEONARBA is a gravity and magnetic potential-field anomaly processing workspace.
 ## Install
 
 ```powershell
-cd GeoFieldLab_Pro
+cd Geonarba
 pip install -r requirements.txt
 python -m desktop
 ```
@@ -111,7 +111,7 @@ The PyInstaller spec bundles the desktop launcher and the `examples/` folder. A 
 ## Project Structure
 
 ```text
-GeoFieldLab_Pro/
+Geonarba/
 |-- app.py
 |-- requirements.txt
 |-- README.md
