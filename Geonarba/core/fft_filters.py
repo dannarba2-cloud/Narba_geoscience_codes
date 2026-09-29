@@ -4,25 +4,8 @@ from __future__ import annotations
 
 import numpy as np
 
+from .fourier import pad_values as _pad_values, wavenumber_grid as _wavenumber_grid
 from .grid_tools import GridData, validate_fft_ready
-
-
-def _pad_values(values: np.ndarray, padding: str) -> tuple[np.ndarray, tuple[slice, slice]]:
-    if padding == "none":
-        return values, (slice(None), slice(None))
-    pad_y = max(values.shape[0] // 2, 1)
-    pad_x = max(values.shape[1] // 2, 1)
-    mode = "reflect" if padding == "reflect" else "constant"
-    padded = np.pad(values, ((pad_y, pad_y), (pad_x, pad_x)), mode=mode)
-    return padded, (slice(pad_y, pad_y + values.shape[0]), slice(pad_x, pad_x + values.shape[1]))
-
-
-def _wavenumber_grid(shape: tuple[int, int], dx: float, dy: float) -> np.ndarray:
-    ny, nx = shape
-    kx = 2.0 * np.pi * np.fft.fftfreq(nx, d=dx)
-    ky = 2.0 * np.pi * np.fft.fftfreq(ny, d=dy)
-    kx_grid, ky_grid = np.meshgrid(kx, ky)
-    return np.sqrt(kx_grid**2 + ky_grid**2)
 
 
 def compute_upward_continuation(

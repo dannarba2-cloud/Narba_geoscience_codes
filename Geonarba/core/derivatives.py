@@ -4,29 +4,12 @@ from __future__ import annotations
 
 import numpy as np
 
+from .fourier import pad_values as _pad_values, wavenumber_grid as _wavenumber_grid
 from .grid_tools import GridData, validate_fft_ready
 
 
 def _edge_order(grid: GridData) -> int:
     return 2 if min(grid.values.shape) >= 3 else 1
-
-
-def _pad_values(values: np.ndarray, padding: str) -> tuple[np.ndarray, tuple[slice, slice]]:
-    if padding == "none":
-        return values, (slice(None), slice(None))
-    pad_y = max(values.shape[0] // 2, 1)
-    pad_x = max(values.shape[1] // 2, 1)
-    mode = "reflect" if padding == "reflect" else "constant"
-    padded = np.pad(values, ((pad_y, pad_y), (pad_x, pad_x)), mode=mode)
-    return padded, (slice(pad_y, pad_y + values.shape[0]), slice(pad_x, pad_x + values.shape[1]))
-
-
-def _wavenumber_grid(shape: tuple[int, int], dx: float, dy: float) -> np.ndarray:
-    ny, nx = shape
-    kx = 2.0 * np.pi * np.fft.fftfreq(nx, d=dx)
-    ky = 2.0 * np.pi * np.fft.fftfreq(ny, d=dy)
-    kx_grid, ky_grid = np.meshgrid(kx, ky)
-    return np.sqrt(kx_grid**2 + ky_grid**2)
 
 
 def compute_dx(grid: GridData) -> GridData:
@@ -72,16 +55,13 @@ def compute_thg(grid: GridData) -> GridData:
 def compute_vertical_derivative_fft(
     grid: GridData,
     order: int = 1,
-    padding: str = "none",
+    padding: str = "reflect",
     fill_method: str = "nearest",
 ) -> GridData:
     """Compute vertical derivative by multiplying FFT(T) by |k|^order."""
 
     if order < 1:
         raise ValueError("Vertical derivative order must be at least 1.")
-    if padding not in {"none", "zero", "reflect"}:
-        raise ValueError("padding must be one of: none, zero, reflect.")
-
     ready = validate_fft_ready(grid, fill_method=fill_method)
     values, crop = _pad_values(ready.values, padding)
     k = _wavenumber_grid(values.shape, ready.dx, ready.dy)
@@ -106,9 +86,9 @@ def compute_vertical_derivative_fft(
     )
 
 
-def compute_fvd(grid: GridData, padding: str = "none") -> GridData:
+def compute_fvd(grid: GridData, padding: str = "reflect") -> GridData:
     return compute_vertical_derivative_fft(grid, order=1, padding=padding)
 
 
-def compute_svd(grid: GridData, padding: str = "none") -> GridData:
+def compute_svd(grid: GridData, padding: str = "reflect") -> GridData:
     return compute_vertical_derivative_fft(grid, order=2, padding=padding)

@@ -5,7 +5,7 @@ from __future__ import annotations
 import numpy as np
 
 from .analytic_signal import compute_analytic_signal
-from .derivatives import compute_thg
+from .derivatives import compute_fvd, compute_thg
 from .grid_tools import GridData
 from .tilt import compute_tilt_derivative
 
@@ -29,6 +29,25 @@ def compute_fsed(
     """Compute Fast Sigmoid Edge Detection from a selected base field."""
 
     base_key = base.lower().strip()
+    if base_key in {"thg ratio", "thg_ratio", "ratio"}:
+        # Ratio form (Pham et al., 2020-2021 style): R = dTHG/dz / |grad_h THG| -> bounded sigmoid, peaks over edges.
+        thg = compute_thg(grid)
+        vdr = compute_fvd(thg).values
+        gy, gx = np.gradient(thg.values, grid.dy, grid.dx)
+        ratio = vdr / (np.hypot(gx, gy) + epsilon * np.nanmax(np.abs(vdr)) + np.finfo(float).tiny)
+        values = 1.0 / (1.0 + np.exp(-gain * ratio)) if method == "logistic" else 0.5 * (1 + ratio / (1.0 + np.abs(ratio)))
+        return grid.with_values(
+            values,
+            name=f"{grid.name}_FSED_ratio_{method}",
+            units="dimensionless",
+            metadata={
+                "method": "fsed",
+                "base": "thg_ratio",
+                "variant": method,
+                "formula": "R = VDR(THG)/|grad_h THG|; logistic 1/(1+e^{-gR}) or fast sigmoid 0.5(1 + R/(1+|R|))",
+                "warning": "Edge filters highlight mathematical gradients, not automatically faults.",
+            },
+        )
     if base_key == "thg":
         base_grid = compute_thg(grid)
     elif base_key == "asa":
@@ -44,7 +63,7 @@ def compute_fsed(
     elif base_key in {"direct", "input"}:
         base_grid = grid
     else:
-        raise ValueError("base must be THG, ASA, absolute TILT, or direct input.")
+        raise ValueError("base must be THG ratio, THG, ASA, absolute TILT, or direct input.")
 
     normalized = _normalize(base_grid.values, epsilon=epsilon)
     if method == "logistic":

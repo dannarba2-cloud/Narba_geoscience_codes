@@ -8,7 +8,7 @@ from .derivatives import compute_fvd, compute_thg
 from .grid_tools import GridData
 
 
-def compute_tilt_derivative(grid: GridData, epsilon: float = 1e-10, padding: str = "none") -> GridData:
+def compute_tilt_derivative(grid: GridData, epsilon: float = 1e-10, padding: str = "reflect") -> GridData:
     """Compute TILT/TDR = arctan(FVD / (THG + epsilon))."""
 
     thg = compute_thg(grid).values
