@@ -126,11 +126,11 @@ def sidebar() -> str:
         for layer_name in list(st.session_state.layers.keys())[-8:]:
             st.sidebar.caption(layer_name)
     st.sidebar.divider()
-    st.sidebar.subheader("Planned modules")
+    st.sidebar.subheader("Desktop method library")
     for category, items in FUTURE_MODULES.items():
         with st.sidebar.expander(category):
             for item in items:
-                st.caption(f"{item} - planned for V2/V3")
+                st.caption(item)
     return selected
 
 
@@ -593,15 +593,15 @@ def panel_export_report() -> None:
 
 
 def panel_future_modules() -> None:
-    st.header("Future Modules")
+    st.header("Method Library")
     section_intro(
-        "Roadmap",
-        "These modules are planned for V2/V3 and are intentionally disabled in V1.",
+        "Desktop Processing Toolbox",
+        "All methods below are implemented in the desktop app (python -m desktop) with demo datasets.",
     )
     for category, items in FUTURE_MODULES.items():
-        with st.expander(category, expanded=True):
+        with st.expander(category, expanded=False):
             for item in items:
-                st.checkbox(item, value=False, disabled=True)
+                st.markdown(f"- {item}")
 
 
 section = sidebar()

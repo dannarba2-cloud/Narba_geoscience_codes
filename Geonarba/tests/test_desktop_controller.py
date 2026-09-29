@@ -21,7 +21,9 @@ def test_qt_main_window_constructs_offscreen():
         pytest.skip(f"Qt runtime unavailable: {qt_app.QT_IMPORT_ERROR}")
     app = qt_app.QApplication.instance() or qt_app.QApplication([])
     window = qt_app.MainWindow(ProjectController())
-    assert window.windowTitle() == "GeoFieldLab Pro Desktop V1"
+    assert window.windowTitle() == "GEONARBA - GeoFieldLab Pro Desktop"
+    menus = [a.text().replace("&&", "\0").replace("&", "").replace("\0", "&") for a in window.menuBar().actions()]
+    assert {"File", "Data", "Potential Fields", "Seismic", "GIS & Spatial Analysis", "Help"} <= set(menus)
     window.close()
     app.processEvents()
 

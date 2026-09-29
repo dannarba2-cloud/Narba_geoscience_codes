@@ -48,6 +48,46 @@ from .project import ProjectSession
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 EXAMPLE_DATASET = PROJECT_ROOT / "examples" / "synthetic_anomaly.csv"
+DATA_TYPES = ("GridData", "ProfileData", "Section", "DataFrame", "RasterImage")
+
+
+def _is_data(obj: Any) -> bool:
+    return type(obj).__name__ in DATA_TYPES
+
+
+def _flatten_result(result: Any) -> tuple[list[Any], list[dict]]:
+    """Split a method result into storable data objects and report dicts (recursing into tuples/lists/dicts)."""
+
+    objects: list[Any] = []
+    reports: list[dict] = []
+    if result is None:
+        return objects, reports
+    if _is_data(result):
+        objects.append(result)
+    elif isinstance(result, (list, tuple)):
+        for item in result:
+            o, r = _flatten_result(item)
+            objects += o
+            reports += r
+    elif isinstance(result, dict):
+        if result and all(_is_data(v) for v in result.values()):
+            objects += list(result.values())
+        else:
+            reports.append(result)
+    else:
+        reports.append({"result": result})
+    return objects, reports
+
+
+def _fingerprint(obj: Any) -> Any:
+    if isinstance(obj, pd.DataFrame):
+        return pd.util.hash_pandas_object(obj, index=True).sum() if len(obj) else 0
+    arr = getattr(obj, "values", None)
+    if arr is None:
+        arr = getattr(obj, "data", None)
+    if arr is None:
+        arr = getattr(obj, "rgb", None)
+    return hash(np.ascontiguousarray(arr).tobytes()) if arr is not None else id(obj)
 
 
 class ProjectController:
@@ -477,6 +517,119 @@ class ProjectController:
 
     def export_history_json(self, path: str | Path | None = None) -> str:
         return export_history_json(self.session.history, path=path)
+
+    # ------------------------------------------------------------------ method library
+    def load_demo_library(self, names: list[str] | None = None) -> list[str]:
+        """Add demo datasets (all, or the given names) to the session; existing names are kept."""
+
+        from core.synthetic import demo_library
+
+        if not hasattr(self, "_demo_cache"):
+            self._demo_cache = demo_library()
+        wanted = names or list(self._demo_cache)
+        added = []
+        for name in wanted:
+            if name in self.session._all_names():
+                continue
+            obj = self._demo_cache[name]
+            if isinstance(obj, pd.DataFrame):
+                obj = obj.copy()
+            added.append(self.session.add_object(obj, name))
+        return added
+
+    def run_method(self, key: str, inputs: dict[str, Any], params: dict[str, Any]) -> dict[str, Any]:
+        """Run a registry method. `inputs` maps input names to stored object names (list for multi inputs, None if unused).
+
+        Returns {'outputs': [(kind, name), ...], 'report': dict | None, 'seconds': float}.
+        """
+
+        from core.registry import BY_KEY
+
+        method = BY_KEY[key]
+        kwargs: dict[str, Any] = {}
+        used: list[str] = []
+        for spec in method.inputs:
+            value = inputs.get(spec.name)
+            if value in (None, "", []):
+                if not spec.optional:
+                    raise ValueError(f"'{spec.label}' is required for {method.name}.")
+                kwargs[spec.name] = None
+                continue
+            if spec.kind in {"grids", "sections"}:
+                names = list(value)
+                kwargs[spec.name] = [self.session.get_object(n) for n in names]
+                used += names
+            else:
+                kwargs[spec.name] = self.session.get_object(value)
+                used.append(value)
+        snapshots = {n: _fingerprint(self.session.get_object(n)) for n in used}
+        kwargs.update({p.name: params.get(p.name, p.default) for p in method.params})
+        start = time.perf_counter()
+        result = method.run(**kwargs)
+        elapsed = time.perf_counter() - start
+        for n, fp in snapshots.items():
+            if _fingerprint(self.session.get_object(n)) != fp:
+                raise RuntimeError(f"{method.name} mutated input '{n}'.")
+        objects, reports = _flatten_result(result)
+        outputs = []
+        first_grid = None
+        warnings: list[str] = []
+        formula = None
+        for obj in objects:
+            table_name = None
+            if isinstance(obj, pd.DataFrame):  # tables carry no name: label them by input + method
+                table_name = obj.attrs.get("name") or f"{used[0] if used else 'result'}_{method.key}"
+            stored = self.session.add_object(obj, table_name)
+            kind = self.session.kind_of(stored)
+            outputs.append((kind, stored))
+            meta = getattr(obj, "metadata", {}) or {}
+            if isinstance(meta, dict):
+                formula = formula or meta.get("formula")
+                if meta.get("warning"):
+                    warnings.append(str(meta["warning"]))
+            if first_grid is None and kind == "grid":
+                first_grid = self.session.layers[stored]
+        report = None
+        if reports:
+            report = reports[0] if len(reports) == 1 else {f"part_{i + 1}": r for i, r in enumerate(reports)}
+            self.session.reports.append({"method": method.label, "report": report})
+            if isinstance(report, dict) and report.get("warning"):
+                warnings.append(str(report["warning"]))
+        self.session.add_history(make_history_entry(
+            method_name=method.label, input_layer=", ".join(used) or "(parameters only)",
+            output_layer=", ".join(name for _, name in outputs) or "report", parameters=dict(params), result=first_grid,
+            warnings=warnings, computation_time_s=elapsed, formula=formula or method.reference,
+        ))
+        return {"outputs": outputs, "report": report, "seconds": elapsed, "warnings": warnings}
+
+    def import_file(self, path: str | Path) -> str:
+        """Import CSV/TXT/XYZ/DAT (table, also used for grid creation) or LAS well logs as a table."""
+
+        path = Path(path)
+        if path.suffix.lower() == ".las":
+            from core.wells import read_las
+
+            return self.session.add_object(read_las(path), path.stem)
+        data = self.load_table(path)
+        return self.session.add_object(data.copy(), path.stem)
+
+    def import_section(self, path: str | Path, sample_interval: float, trace_spacing: float = 1.0, name: str | None = None) -> str:
+        """Import a samples x traces matrix (CSV/TXT, or .npy) as a seismic/GPR section."""
+
+        from core.seismic import Section
+
+        path = Path(path)
+        data = np.load(path) if path.suffix.lower() == ".npy" else np.loadtxt(path, delimiter=None if path.suffix.lower() != ".csv" else ",")
+        sec = Section(data, sample_interval, x=np.arange(np.atleast_2d(data).shape[-1]) * trace_spacing, name=name or path.stem)
+        return self.session.add_object(sec)
+
+    def export_table_csv(self, name: str, path: str | Path) -> str:
+        text = self.session.tables[name].to_csv(index=False)
+        Path(path).write_text(text, encoding="utf-8")
+        return text
+
+    def remove(self, name: str) -> None:
+        self.session.remove_object(name)
 
     def export_markdown_report(self, path: str | Path | None = None) -> str:
         return export_markdown_report(

@@ -2,6 +2,8 @@
 
 from pathlib import Path
 
+from PyInstaller.utils.hooks import collect_data_files
+
 
 project_root = Path(SPECPATH)
 
@@ -9,7 +11,7 @@ a = Analysis(
     ["desktop_launcher.py"],
     pathex=[str(project_root)],
     binaries=[],
-    datas=[(str(project_root / "examples"), "examples")],
+    datas=[(str(project_root / "examples"), "examples")] + collect_data_files("ppigrf"),  # IGRF-14 coefficients
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
@@ -26,7 +28,6 @@ a = Analysis(
         "plotly",
         "pyarrow",
         "pytest",
-        "sklearn",
         "streamlit",
         "tensorflow",
         "torch",
